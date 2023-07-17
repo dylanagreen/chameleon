@@ -1,9 +1,9 @@
+using LinearAlgebra
+using Random
+using Statistics
+
 using FileIO
 using Images
-
-k = 5
-
-### K-Means ###
 
 """
     euclidean_distance(data::Matrix, centroids::Matrix)
@@ -13,6 +13,7 @@ all the points in the centroids matrix.
 function euclidean_distance(data::Matrix, centroids::Matrix)
     c = transpose(centroids[1, :])
     dists = sqrt.(sum((data .- c) .^ 2, dims=2))
+    # println(dists == norm(data .- c))
     for i in 2:size(centroids)[1]
         c = transpose(centroids[i, :])
         d = sqrt.(sum((data .- c) .^ 2, dims=2))
@@ -104,3 +105,25 @@ function k_means(data::Matrix, K::Int, N::Int)
     # Don't need to return the distance here
     return centroids, best_cat, best_hist
 end
+
+
+# Set seed for reproducibility
+rng = Xoshiro(91701)
+K = 5
+
+# Load the image and permute the dimensions to get it in (x, y, rgb) order
+img = FileIO.load("./dial_of_destiny.jpg")
+img = float64.(PermutedDimsArray(channelview(img), [2, 3, 1]))
+orig_shape = size(img)
+
+# Reshape is necessary to turn this into a single list of 3-dimensional points
+# we don't care about x/y position when determinig the color space centroids
+img = reshape(img, :, 3)
+
+println(size(img))
+
+c, cat, _ = k_means(img, 5, 2)
+
+reduced_img = PermutedDimsArray(reshape(c[cat, :], orig_shape), [3, 1, 2])
+
+save("test.png", colorview(RGB, reduced_img))
