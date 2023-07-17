@@ -4,23 +4,28 @@ using Statistics
 
 using FileIO
 using Images
+using Distances
 
-"""
-    euclidean_distance(data::Matrix, centroids::Matrix)
-Compute the Euclidean Distance between all points in the data matrix and
-all the points in the centroids matrix.
-"""
-function euclidean_distance(data::Matrix, centroids::Matrix)
-    c = transpose(centroids[1, :])
-    dists = sqrt.(sum((data .- c) .^ 2, dims=2))
-    # println(dists == norm(data .- c))
-    for i in 2:size(centroids)[1]
-        c = transpose(centroids[i, :])
-        d = sqrt.(sum((data .- c) .^ 2, dims=2))
-        dists = hcat(dists, d)
-    end
-    return dists
-end
+# """
+#     euclidean_distance(data::Matrix, centroids::Matrix)
+# Compute the Euclidean Distance between all points in the data matrix and
+# all the points in the centroids matrix.
+# """
+# function euclidean_distance(data::Matrix, centroids::Matrix)
+#     c = transpose(centroids[1, :])
+#     dists = sqrt.(sum((data .- c) .^ 2, dims=2))
+
+#     f = pairwise(euclidean, transpose(data), transpose(centroids), dims=2)
+#     for i in 2:size(centroids)[1]
+#         c = transpose(centroids[i, :])
+#         d = sqrt.(sum((data .- c) .^ 2, dims=2))
+#         dists = hcat(dists, d)
+#     end
+
+#     println(size(dists), dists[1:5, :])
+#     println(size(f), f[1:5, :])
+#     return dists
+# end
 
 """
     k_means_step(data::Matrix, K::Int)
@@ -37,25 +42,27 @@ Once convergence is achieved, return the centroids, as well as each
 points classification, their Euclidean distance to their classifying centroid
 and finally the history of their Euclidean distance to their classifying centroid.
 """
-function k_means_iter(data::Matrix, K::Int)
+function k_means_iter(data::Matrix, K::Int, max_iter::Int)
     # Pick two random rows as starting points
     start_idcs = rand(rng, 1:size(data)[1], K)
     centroids = data[start_idcs, :]
 
     # Current distance and category
     # We will terminate when no more elements change categories
-    cur_dist = euclidean_distance(data, centroids)
+    cur_dist = pairwise(euclidean, transpose(data), transpose(centroids), dims=2)
     cur_cat = map(ele -> ele[2], argmin(cur_dist, dims=2))
     changes = ones(length(cur_cat))
 
-    while sum(changes) > 0
+    # Counter acts as a hard stop
+    counter = 0
+    while (sum(changes) > 0) && (counter < max_iter)
         centroids = mean(data[vec(cur_cat .== 1), :], dims=1)
         for i in 2:K
             c = mean(data[vec(cur_cat .== i), :], dims=1)
             centroids = vcat(centroids, c)
         end
 
-        new_dist = euclidean_distance(data, centroids)
+        new_dist = pairwise(euclidean, transpose(data), transpose(centroids), dims=2)
         new_cat = map(ele -> ele[2], argmin(new_dist, dims=2))
 
         changes = cur_cat .!= new_cat
@@ -63,6 +70,7 @@ function k_means_iter(data::Matrix, K::Int)
         # Saving these to return them and for use in next loop
         cur_cat = new_cat
         cur_dist = new_dist
+        counter += 1
     end
     return centroids, cur_cat, cur_dist
 
@@ -80,12 +88,13 @@ their classifying centroid.
 function k_means(data::Matrix, K::Int, N::Int)
     # N = number of times to "restart". Needs to be >= 1
     # Do once to get starting values
-    centroids, best_cat, best_dist = k_means_iter(data, K)
+    max_iter = 50
+    centroids, best_cat, best_dist = k_means_iter(data, K, max_iter)
 
     # Loop N times, and if we get a better classification
     # save that one
     for i in 2:N
-        c, cat, dist = k_means_iter(data, K)
+        c, cat, dist = k_means_iter(data, K, max_iter)
 
         # We will need to square the distances to correctly
         # compare the "sum of squares" score instead of the
@@ -101,8 +110,8 @@ end
 
 
 # Set seed for reproducibility
-rng = Xoshiro()
-K = 3
+rng = Xoshiro(91701)
+K = 4
 
 # Load the image and permute the dimensions to get it in (x, y, rgb) order
 img_1 = FileIO.load("./dial_of_destiny.jpg")
@@ -114,16 +123,15 @@ img_1_shape = size(img_1)
 img_1 = reshape(img_1, :, 3)
 
 println("k means 1...")
-centroids_1, _= k_means(img_1, K, 2)
+centroids_1, _= k_means(img_1, K, 3)
 
 img_2 = FileIO.load("./bullet_train.jpg")
 img_2 = float64.(PermutedDimsArray(channelview(img_2), [2, 3, 1]))
 img_2_shape = size(img_2)
-println(img_2_shape)
 img_2 = reshape(img_2, :, 3)
 
 println("k means 2...")
-centroids_2, cat_2 = k_means(img_2, K, 2)
+centroids_2, cat_2 = k_means(img_2, K, 3)
 
 old_centroids = dropdims(centroids_2[cat_2, :], dims=2)
 final = img_2 .- old_centroids
