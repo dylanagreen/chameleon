@@ -48,8 +48,6 @@ function k_means_iter(data::Matrix, K::Int)
     cur_cat = map(ele -> ele[2], argmin(cur_dist, dims=2))
     changes = ones(length(cur_cat))
 
-    hist = [sum(cur_dist .^2 )]
-
     while sum(changes) > 0
         centroids = mean(data[vec(cur_cat .== 1), :], dims=1)
         for i in 2:K
@@ -65,10 +63,8 @@ function k_means_iter(data::Matrix, K::Int)
         # Saving these to return them and for use in next loop
         cur_cat = new_cat
         cur_dist = new_dist
-        push!(hist, sum(cur_dist .^ 2))
-
     end
-    return centroids, cur_cat, cur_dist, hist
+    return centroids, cur_cat, cur_dist
 
 end
 
@@ -84,12 +80,12 @@ their classifying centroid.
 function k_means(data::Matrix, K::Int, N::Int)
     # N = number of times to "restart". Needs to be >= 1
     # Do once to get starting values
-    centroids, best_cat, best_dist, best_hist = k_means_iter(data, K)
+    centroids, best_cat, best_dist = k_means_iter(data, K)
 
     # Loop N times, and if we get a better classification
     # save that one
     for i in 2:N
-        c, cat, dist, hist = k_means_iter(data, K)
+        c, cat, dist = k_means_iter(data, K)
 
         # We will need to square the distances to correctly
         # compare the "sum of squares" score instead of the
@@ -98,32 +94,46 @@ function k_means(data::Matrix, K::Int, N::Int)
             centroids = c
             best_cat = cat
             best_dist = dist
-            best_hist = hist
         end
     end
-
-    # Don't need to return the distance here
-    return centroids, best_cat, best_hist
+    return centroids, best_cat
 end
 
 
 # Set seed for reproducibility
-rng = Xoshiro(91701)
-K = 5
+rng = Xoshiro()
+K = 3
 
 # Load the image and permute the dimensions to get it in (x, y, rgb) order
-img = FileIO.load("./dial_of_destiny.jpg")
-img = float64.(PermutedDimsArray(channelview(img), [2, 3, 1]))
-orig_shape = size(img)
+img_1 = FileIO.load("./dial_of_destiny.jpg")
+img_1 = float64.(PermutedDimsArray(channelview(img_1), [2, 3, 1]))
+img_1_shape = size(img_1)
 
 # Reshape is necessary to turn this into a single list of 3-dimensional points
 # we don't care about x/y position when determinig the color space centroids
-img = reshape(img, :, 3)
+img_1 = reshape(img_1, :, 3)
 
-println(size(img))
+println("k means 1...")
+centroids_1, _= k_means(img_1, K, 2)
 
-c, cat, _ = k_means(img, 5, 2)
+img_2 = FileIO.load("./bullet_train.jpg")
+img_2 = float64.(PermutedDimsArray(channelview(img_2), [2, 3, 1]))
+img_2_shape = size(img_2)
+println(img_2_shape)
+img_2 = reshape(img_2, :, 3)
 
-reduced_img = PermutedDimsArray(reshape(c[cat, :], orig_shape), [3, 1, 2])
+println("k means 2...")
+centroids_2, cat_2 = k_means(img_2, K, 2)
 
-save("test.png", colorview(RGB, reduced_img))
+old_centroids = dropdims(centroids_2[cat_2, :], dims=2)
+final = img_2 .- old_centroids
+
+new_centroids = dropdims(centroids_1[cat_2, :], dims=2)
+final = final .+ new_centroids
+
+println("saving...")
+# Make sure we only have valid RGB colors
+# There's probably a better way to handle this
+clamp!(final, 0, 1.0)
+final = PermutedDimsArray(reshape(final, img_2_shape), [3, 1, 2])
+save("test.png", colorview(RGB, final))
