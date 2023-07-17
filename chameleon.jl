@@ -89,17 +89,20 @@ function k_means(data::Matrix, K::Int, N::Int)
     # N = number of times to "restart". Needs to be >= 1
     # Do once to get starting values
     max_iter = 50
-    centroids, best_cat, best_dist = k_means_iter(data, K, max_iter)
+
+    centroids = 0
+    best_cat = 0
+    best_dist = length(data)
 
     # Loop N times, and if we get a better classification
     # save that one
-    for i in 2:N
+    for i in 1:N
         c, cat, dist = k_means_iter(data, K, max_iter)
 
         # We will need to square the distances to correctly
         # compare the "sum of squares" score instead of the
         # "sum of euclidiean distance"
-        if sum(dist .^ 2) < sum(best_dist .^2)
+        if (sum(dist .^ 2) < sum(best_dist .^2)) && (all(isfinite, c))
             centroids = c
             best_cat = cat
             best_dist = dist
@@ -114,7 +117,7 @@ rng = Xoshiro(91701)
 K = 4
 
 # Load the image and permute the dimensions to get it in (x, y, rgb) order
-img_1 = FileIO.load("./dial_of_destiny.jpg")
+img_1 = FileIO.load("./bullet_train.jpg")
 img_1 = float64.(PermutedDimsArray(channelview(img_1), [2, 3, 1]))
 img_1_shape = size(img_1)
 
@@ -125,7 +128,7 @@ img_1 = reshape(img_1, :, 3)
 println("k means 1...")
 centroids_1, _= k_means(img_1, K, 3)
 
-img_2 = FileIO.load("./bullet_train.jpg")
+img_2 = FileIO.load("./dial_of_destiny.jpg")
 img_2 = float64.(PermutedDimsArray(channelview(img_2), [2, 3, 1]))
 img_2_shape = size(img_2)
 img_2 = reshape(img_2, :, 3)
