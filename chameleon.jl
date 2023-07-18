@@ -6,27 +6,6 @@ using FileIO
 using Images
 using Distances
 
-# """
-#     euclidean_distance(data::Matrix, centroids::Matrix)
-# Compute the Euclidean Distance between all points in the data matrix and
-# all the points in the centroids matrix.
-# """
-# function euclidean_distance(data::Matrix, centroids::Matrix)
-#     c = transpose(centroids[1, :])
-#     dists = sqrt.(sum((data .- c) .^ 2, dims=2))
-
-#     f = pairwise(euclidean, transpose(data), transpose(centroids), dims=2)
-#     for i in 2:size(centroids)[1]
-#         c = transpose(centroids[i, :])
-#         d = sqrt.(sum((data .- c) .^ 2, dims=2))
-#         dists = hcat(dists, d)
-#     end
-
-#     println(size(dists), dists[1:5, :])
-#     println(size(f), f[1:5, :])
-#     return dists
-# end
-
 """
     k_means_step(data::Matrix, K::Int)
 Run a single (full) iteration of the K-means algorithm for finding `K` centroids
@@ -43,9 +22,13 @@ points classification, their Euclidean distance to their classifying centroid
 and finally the history of their Euclidean distance to their classifying centroid.
 """
 function k_means_iter(data::Matrix, K::Int, max_iter::Int)
-    # Pick two random rows as starting points
-    start_idcs = rand(rng, 1:size(data)[1], K)
-    centroids = data[start_idcs, :]
+    # Pick K random rows as starting points
+    # Start with rounded unique starting points to ensure that we don't
+    # get the same starting point (which is possible with large images)
+    # for multiple centroids
+    possible_centroids = unique(data, dims=1)
+    start_idcs = rand(rng, 1:size(possible_centroids)[1], K)
+    centroids = possible_centroids[start_idcs, :]
 
     # Current distance and category
     # We will terminate when no more elements change categories
@@ -92,7 +75,7 @@ function k_means(data::Matrix, K::Int, N::Int)
 
     centroids = 0
     best_cat = 0
-    best_dist = length(data)
+    best_dist = length(data) * 1e3
 
     # Loop N times, and if we get a better classification
     # save that one
@@ -114,7 +97,7 @@ end
 
 # Set seed for reproducibility
 rng = Xoshiro(91701)
-K = 4
+K = 3
 
 # Load the image and permute the dimensions to get it in (x, y, rgb) order
 img_1 = FileIO.load("./bullet_train.jpg")
@@ -126,7 +109,15 @@ img_1_shape = size(img_1)
 img_1 = reshape(img_1, :, 3)
 
 println("k means 1...")
-centroids_1, _= k_means(img_1, K, 3)
+centroids_1, cat_1 = k_means(img_1, K, 3)
+
+# Count the number of occurences of each category number
+# as an array where the index is the category number and the value in that
+# index is the number of occurences of that index
+cat_1_nums = zeros(K)
+for i in 1:K
+    cat_1_nums[i] = count(==(i), cat_1)
+end
 
 img_2 = FileIO.load("./dial_of_destiny.jpg")
 img_2 = float64.(PermutedDimsArray(channelview(img_2), [2, 3, 1]))
@@ -136,6 +127,21 @@ img_2 = reshape(img_2, :, 3)
 println("k means 2...")
 centroids_2, cat_2 = k_means(img_2, K, 3)
 
+cat_2_nums = zeros(K)
+for i in 1:K
+    cat_2_nums[i] = count(==(i), cat_2)
+end
+
+# The indices that sort the categories low to high
+# We will use these to match the category centroids between the two images to
+# make sure that, for example, the centroid with the most pixels in one image
+# is linked to the centroid with the most pixels in the other image
+cat_2_sorting = sortperm(cat_2_nums)
+cat_1_sorting = sortperm(cat_1_nums)
+centroids_1 = centroids_1[cat_1_sorting, :][cat_2_sorting, :]
+
+
+println("converting...")
 old_centroids = dropdims(centroids_2[cat_2, :], dims=2)
 final = img_2 .- old_centroids
 
